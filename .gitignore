@@ -8,3 +8,4 @@ HALTED
 reports/*.md
 !reports/.gitkeep
 .pytest_cache/
+reports/*.csv

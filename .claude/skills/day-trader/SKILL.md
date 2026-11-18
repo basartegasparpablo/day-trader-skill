@@ -1,6 +1,6 @@
 ---
 name: day-trader
-description: Run the risk-first trading system in this repo - backtest and compare strategies, pick one honestly, paper trade it automatically on Alpaca, review the journal, and decide (with a checklist) whether it may ever go live. Use when the user asks about trading, backtests, strategy choice, their paper/live bot, positions, P&L, or risk limits.
+description: Run the risk-first investing/trading system in this repo - monthly index investing (DCA), company news briefs and news-impact studies, strategy backtests and comparison, automatic Alpaca paper trading, journal review, and the go-live checklist. Use when the user asks about investing, trading, stock news, backtests, strategy choice, their paper/live bot, positions, P&L, or risk limits.
 ---
 
 # Day Trader (risk-first)
@@ -25,6 +25,33 @@ operate it and to be the honest voice in the room. Never promise returns.
 6. This is not financial advice; the user owns every decision.
 
 ## Workflow
+
+### 0. The core: monthly index investing (DCA)
+On real data 2008-2026, holding the index beat every trading strategy here, so this
+is the default recommendation for "make money slowly".
+```bash
+python -m trader dca-backtest --monthly 500
+python -m trader dca --dry-run      # then `dca` (idempotent: one buy per month)
+```
+When presenting results, always show the worst point vs. money put in (about -41% in
+2009) next to the final gain: the user must be ready to keep buying through that.
+The DCA never sells and ignores news, by design. Don't add timing rules to it.
+
+### News: daily brief and impact study
+```bash
+python -m trader news [SYMBOLS] [--hours 24]       # headlines, tone, today's move
+python -m trader news-study --start 2022-01-01     # reaction vs. follow-through, vs SPY
+```
+When the user asks how news affects a stock:
+1. Run `news` for the brief. You may also read the headlines yourself and explain them,
+   since you understand them better than the word-list scorer; say when the scorer
+   got a headline wrong.
+2. Explain the difference between **reaction** (same day, already happened by the time
+   anyone reads it) and **drift** (next 1/5 days, the only tradable part), using `news-study`.
+3. Only suggest enabling `news.filter` if drift after negative news is significant
+   (|t| >= 2) on a large sample (hundreds of news-days, multi-year, alpaca source).
+Never present one headline as a reason to buy or sell; news-driven trading is where
+retail traders are slowest relative to professionals.
 
 ### 1. Choose a strategy (backtests)
 ```bash

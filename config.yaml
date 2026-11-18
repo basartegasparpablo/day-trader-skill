@@ -6,7 +6,7 @@
 mode: paper                 # paper | live
 
 # Which strategy the bot trades. Pick it with `python -m trader compare`.
-strategy: momentum_rotation # trend_pullback | momentum_rotation | opening_range_breakout
+strategy: momentum_rotation # trend_pullback | momentum_rotation | opening_range_breakout | none (DCA only)
 
 # Liquid ETFs only: diversified, cheap to trade, no single-company blowups.
 universe: [SPY, QQQ, IWM, DIA, EFA, EEM, XLK, XLF, XLV, XLE, XLI, XLY, XLP, XLU, TLT, IEF, GLD]
@@ -50,3 +50,31 @@ strategies:
     range_minutes: 30
     last_entry: "14:00"
     universe: [SPY, QQQ, IWM]
+
+# ---------------------------------------------------------------------------
+# Monthly index investing (the slow core). Buys a fixed dollar amount every
+# month regardless of news or market moves, and never sells.
+# Best practice: give it its own Alpaca account via env ALPACA_DCA_API_KEY_ID /
+# ALPACA_DCA_API_SECRET_KEY. Otherwise it shares the main account and the
+# trading bot treats these symbols as untouchable core holdings.
+# ---------------------------------------------------------------------------
+dca:
+  enabled: true
+  monthly_amount: 500       # USD per month; set to what you can invest without needing it back
+  allocations:              # must sum to 1.0
+    VTI: 1.0                # total US stock market; e.g. {VTI: 0.6, VXUS: 0.3, BND: 0.1} to diversify
+
+# ---------------------------------------------------------------------------
+# Company news
+# ---------------------------------------------------------------------------
+news:
+  source: alpaca            # alpaca (history since 2015, needs keys) | yahoo (last few days only)
+  scorer: lexicon           # lexicon (free) | claude (needs ANTHROPIC_API_KEY, costs money)
+  # Companies to study and to show in the daily news brief
+  watchlist: [AAPL, MSFT, NVDA, AMZN, GOOGL, META, TSLA, AVGO, JPM, LLY, V, XOM, UNH, COST, NFLX]
+  study_threshold: 0.2      # |tone| >= this counts as positive/negative news
+  filter:                   # live trading: don't BUY a symbol with bad recent news
+    enabled: false          # turn on only if `news-study` shows negative news keeps hurting afterwards
+    lookback_hours: 24
+    block_below: -0.3
+    min_articles: 1

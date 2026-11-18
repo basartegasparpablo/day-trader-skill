@@ -104,11 +104,11 @@ def _yahoo(sym, timeframe, start, end, cfg):
 
 
 # ----------------------------------------------------------------------------- Alpaca
-def alpaca_headers():
-    key = os.environ.get("ALPACA_API_KEY_ID")
-    secret = os.environ.get("ALPACA_API_SECRET_KEY")
+def alpaca_headers(prefix: str = "ALPACA"):
+    key = os.environ.get(f"{prefix}_API_KEY_ID")
+    secret = os.environ.get(f"{prefix}_API_SECRET_KEY")
     if not key or not secret:
-        raise RuntimeError("set ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY (see README)")
+        raise RuntimeError(f"set {prefix}_API_KEY_ID and {prefix}_API_SECRET_KEY (see README)")
     return {"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret}
 
 

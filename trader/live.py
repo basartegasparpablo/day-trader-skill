@@ -17,6 +17,7 @@ import pandas as pd
 from . import journal
 from .broker import AlpacaBroker
 from .config import ROOT
+from .dca import core_symbols
 from .data import NY, load_bars
 from .risk import daily_loss_breached, drawdown_breached, position_size
 from .strategies import make_strategy
@@ -55,8 +56,12 @@ def completed_bars(bars: dict[str, pd.DataFrame], timeframe: str, now_ny: pd.Tim
 def run_once(cfg, dry_run=False, broker=None, now=None) -> dict:
     paper = check_mode(cfg)
     mode = "paper" if paper else "live"
+    if str(cfg.get("strategy", "none")).lower() == "none":
+        _log("strategy: none - active trading is off (DCA, if enabled, runs separately).")
+        return {"status": "no_strategy"}
     strat = make_strategy(cfg["strategy"], cfg)
     risk = cfg["risk"]
+    core = core_symbols(cfg)  # index holdings the trading bot must never touch
     if STOP_FILE.exists():
         _log("Kill switch file STOP present: no trading. Delete it to resume.")
         return {"status": "stopped"}
@@ -76,7 +81,10 @@ def run_once(cfg, dry_run=False, broker=None, now=None) -> dict:
     if acct.get("trading_blocked") or acct.get("account_blocked"):
         raise SystemExit("Alpaca account is blocked from trading.")
     equity, last_equity, cash = float(acct["equity"]), float(acct["last_equity"]), float(acct["cash"])
-    positions = broker.positions()
+    all_positions = broker.positions()
+    positions = {s: p for s, p in all_positions.items() if s not in core}
+    core_value = sum(float(p.get("market_value", 0)) for s, p in all_positions.items() if s in core)
+    trading_equity = equity - core_value
     actions = []
 
     def close(sym, reason):
@@ -113,7 +121,7 @@ def run_once(cfg, dry_run=False, broker=None, now=None) -> dict:
         return {"status": "end_of_day", "actions": actions}
 
     # --- signals on completed bars only
-    universe = strat.universe(cfg)
+    universe = [s for s in strat.universe(cfg) if s not in core]
     lookback = timedelta(days=5) if strat.timeframe != "1Day" else timedelta(days=int(strat.warmup_bars * 1.6) + 30)
     start = (now_ny - lookback).tz_localize(None)
     bars = load_bars(universe, strat.timeframe, start=start, source="alpaca", cfg=cfg, use_cache=False)
@@ -141,11 +149,12 @@ def run_once(cfg, dry_run=False, broker=None, now=None) -> dict:
              if bool(row["entry"]) and not bool(row["exit"]) and s not in positions and s not in pending_buys]
     cands.sort(key=lambda s: -float(last[s]["score"]) if pd.notna(last[s]["score"]) else float("inf"))
     tif = "day" if strat.flat_eod else "gtc"
+    cands = news_filter(cands, cfg, mode, dry_run)
     for sym in cands[:max(slots, 0)]:
         price = float(bars[sym]["close"].iloc[-1])
         sd = float(last[sym]["stop_dist"]) if pd.notna(last[sym]["stop_dist"]) else None
         w = float(last[sym]["weight"]) if pd.notna(last[sym]["weight"]) else None
-        qty = position_size(equity, cash, price, sd, w, risk, max_order_value=risk.get("max_order_value"))
+        qty = position_size(trading_equity, cash, price, sd, w, risk, max_order_value=risk.get("max_order_value"))
         if qty <= 0:
             _log(f"skip {sym}: position size rounds to 0 shares")
             continue
@@ -162,6 +171,29 @@ def run_once(cfg, dry_run=False, broker=None, now=None) -> dict:
     journal.log_run(mode, strat.name, equity, cash, len(positions), status, {"actions": actions})
     _log(f"{mode} equity ${equity:,.2f} | positions {sorted(positions)} | actions {actions or 'none'}")
     return {"status": status, "actions": actions}
+
+
+def news_filter(cands, cfg, mode, dry_run, tone_fn=None):
+    """Drop entry candidates whose recent news tone is strongly negative (config news.filter)."""
+    f = (cfg.get("news") or {}).get("filter") or {}
+    if not f.get("enabled") or not cands:
+        return cands
+    if tone_fn is None:
+        from .news import recent_tone as tone_fn
+    try:
+        tone = tone_fn(cands, cfg)
+    except Exception as e:  # never let a news outage place or block trades silently
+        _log(f"news filter unavailable ({e}); proceeding without it")
+        return cands
+    keep = []
+    for s in cands:
+        score, n, heads = tone.get(s, (0.0, 0, []))
+        if n >= int(f.get("min_articles", 1)) and score <= float(f.get("block_below", -0.3)):
+            _log(f"skip {s}: negative news (tone {score:+.2f} over {n} articles): {heads[-1] if heads else ''}")
+            journal.log_order(mode, s, "skip", 0, None, None, f"news tone {score:+.2f} ({n} articles)", None, dry_run)
+        else:
+            keep.append(s)
+    return keep
 
 
 def run_loop(cfg, dry_run=False, interval=300):

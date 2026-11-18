@@ -10,14 +10,16 @@ LIVE_URL = "https://api.alpaca.markets"
 
 
 class AlpacaBroker:
-    def __init__(self, paper: bool = True, session: requests.Session | None = None):
+    def __init__(self, paper: bool = True, session: requests.Session | None = None, key_env: str = "ALPACA"):
         self.paper = paper
         self.base = PAPER_URL if paper else LIVE_URL
         self.s = session or requests.Session()
-        self.s.headers.update(alpaca_headers())
+        self.s.headers.update(alpaca_headers(key_env))
 
-    def _req(self, method, path, **kw):
+    def _req(self, method, path, allow_404=False, **kw):
         r = self.s.request(method, self.base + path, timeout=30, **kw)
+        if allow_404 and r.status_code == 404:
+            return None
         if r.status_code >= 400:
             raise RuntimeError(f"Alpaca {method} {path} -> {r.status_code}: {r.text[:300]}")
         return r.json() if r.content else None
@@ -58,3 +60,13 @@ class AlpacaBroker:
             order["order_class"] = "oto"
             order["stop_loss"] = {"stop_price": f"{stop_price:.2f}"}
         return self._req("POST", "/v2/orders", json=order)
+
+    def order_by_client_id(self, client_order_id: str):
+        return self._req("GET", "/v2/orders:by_client_order_id",
+                         params={"client_order_id": client_order_id}, allow_404=True)
+
+    def buy_notional(self, symbol: str, dollars: float, client_order_id: str):
+        """Fractional-share market buy for a dollar amount (used by the monthly DCA)."""
+        return self._req("POST", "/v2/orders", json={
+            "symbol": symbol, "notional": f"{dollars:.2f}", "side": "buy", "type": "market",
+            "time_in_force": "day", "client_order_id": client_order_id})

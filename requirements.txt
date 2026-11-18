@@ -3,3 +3,6 @@ numpy>=1.26
 PyYAML>=6.0
 requests>=2.31
 pytest>=8.0
+# optional: news scoring with Claude (news.scorer: claude)
+# anthropic>=2.10
+# pydantic>=2

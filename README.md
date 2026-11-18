@@ -13,7 +13,7 @@ The path is: **backtest → pick honestly → paper trade automatically → revi
 
 ```bash
 pip install -r requirements.txt
-python -m pytest -q                       # 18 tests, offline
+python -m pytest -q                       # 27 tests, offline
 ```
 
 Create a free Alpaca account, open **Paper Trading**, generate API keys, then:
@@ -22,6 +22,50 @@ Create a free Alpaca account, open **Paper Trading**, generate API keys, then:
 export ALPACA_API_KEY_ID=...        # paper keys
 export ALPACA_API_SECRET_KEY=...
 ```
+
+## 0. The slow core: monthly index investing (start here)
+
+The backtests below showed that, from 2008 to 2026, simply holding the index beat every
+trading strategy here. So the default plan is: **buy a fixed amount of a broad index fund
+every month, never sell, ignore the news.**
+
+```bash
+python -m trader dca-backtest --monthly 500    # what $500/month into VTI did since 2008
+python -m trader dca --dry-run                 # what it would buy now
+python -m trader dca                           # buy this month's amount (once per month; safe to run daily)
+```
+
+Real result (VTI, Jan 2008 - Nov 2026): $113,500 put in → ~$474,000, about **+13.5%/year**
+on the money invested. The price: at the worst point (early 2009) the account was **41%
+below** what had been put in. Staying in through that is the whole game.
+
+Configure in `config.yaml → dca` (amount, `allocations` such as `{VTI: 0.6, VXUS: 0.3, BND: 0.1}`).
+Best practice is a separate Alpaca account for it (`ALPACA_DCA_API_KEY_ID/SECRET`); in a shared
+account the trading bot treats these symbols as untouchable.
+
+## News: how daily headlines affect prices
+
+```bash
+python -m trader news                          # daily brief: headlines, tone (-1..+1), today's move
+python -m trader news AAPL NVDA --hours 48
+python -m trader news-study --start 2022-01-01 # needs Alpaca keys for history
+```
+
+`news-study` scores every headline for the watchlist companies, assigns it to the trading
+day it could affect (after 16:00 ET → next day), and measures returns **relative to SPY**:
+
+- **reaction**: the day the news hit. Usually clearly positive for good news and negative for
+  bad news, but this move happens within minutes, before you can act.
+- **next_1d / next_5d**: what happened *afterwards*. This is the only part a strategy could
+  use. If it is not significant (|t| < 2), the news was already priced in.
+
+Tone scoring is a free finance word list by default; set `news.scorer: claude` (needs
+`pip install anthropic pydantic` and an Anthropic API key; costs money) for Claude to read
+each headline, which handles cases like "stops shipping approved chips" far better.
+
+Live: `news.filter.enabled: true` makes the bot skip buying a symbol with strongly negative
+news in the last 24h. Leave it off unless `news-study` shows negative news keeps hurting
+in the following days. The DCA core deliberately ignores news.
 
 ## 1. Choose a strategy
 
@@ -105,4 +149,6 @@ trader/live.py         paper/live decision cycle
 trader/broker.py       Alpaca REST client
 trader/data.py         Yahoo / Alpaca / CSV / synthetic bars
 trader/journal.py      SQLite audit log
+trader/dca.py          monthly index investing (live + backtest)
+trader/news.py         news fetch, tone scoring, event study, live filter
 ```

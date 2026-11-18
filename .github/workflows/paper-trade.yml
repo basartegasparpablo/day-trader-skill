@@ -22,6 +22,9 @@ jobs:
     env:
       ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
       ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+      # optional separate account for the monthly index buys
+      ALPACA_DCA_API_KEY_ID: ${{ secrets.ALPACA_DCA_API_KEY_ID }}
+      ALPACA_DCA_API_SECRET_KEY: ${{ secrets.ALPACA_DCA_API_SECRET_KEY }}
     steps:
       - name: Check secrets
         id: keys
@@ -44,5 +47,10 @@ jobs:
         if: steps.keys.outputs.ok == 'true'
         run: |
           grep -qE '^mode:\s*paper' config.yaml || { echo "CI only trades paper"; exit 1; }
+          python -m trader dca ${{ inputs.dry_run && '--dry-run' || '' }}
           python -m trader run ${{ inputs.dry_run && '--dry-run' || '' }}
           python -m trader journal --runs -n 5
+      - name: News brief
+        if: steps.keys.outputs.ok == 'true'
+        continue-on-error: true
+        run: python -m trader news
