@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.env
+data/cache/
+journal.db
+STOP
+HALTED
+reports/*.md
+!reports/.gitkeep
+.pytest_cache/

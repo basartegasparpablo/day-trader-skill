@@ -1,0 +1,48 @@
+name: paper-trade
+
+# One decision cycle per trading day, shortly after the US open.
+# 14:50 UTC = 09:50 ET in winter / 10:50 ET in summer (both after the open).
+# Only for daily strategies (momentum_rotation, trend_pullback).
+on:
+  schedule:
+    - cron: "50 14 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Decide and log only, place no orders"
+        type: boolean
+        default: true
+
+concurrency: paper-trade
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+      ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+    steps:
+      - name: Check secrets
+        id: keys
+        run: |
+          if [ -z "$ALPACA_API_KEY_ID" ] || [ -z "$ALPACA_API_SECRET_KEY" ]; then
+            echo "Alpaca secrets not set; skipping." && echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.keys.outputs.ok == 'true'
+      - uses: actions/setup-python@v5
+        if: steps.keys.outputs.ok == 'true'
+        with:
+          python-version: "3.12"
+      - name: Install
+        if: steps.keys.outputs.ok == 'true'
+        run: pip install -r requirements.txt
+      - name: Paper trade (never live from CI)
+        if: steps.keys.outputs.ok == 'true'
+        run: |
+          grep -qE '^mode:\s*paper' config.yaml || { echo "CI only trades paper"; exit 1; }
+          python -m trader run ${{ inputs.dry_run && '--dry-run' || '' }}
+          python -m trader journal --runs -n 5

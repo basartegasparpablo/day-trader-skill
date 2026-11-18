@@ -1,0 +1,52 @@
+# ---------------------------------------------------------------------------
+# Trading system configuration.
+# Safety first: mode stays "paper" until the go-live checklist in README.md
+# is complete. Live mode ALSO requires env TRADER_I_UNDERSTAND_LIVE_RISK=yes.
+# ---------------------------------------------------------------------------
+mode: paper                 # paper | live
+
+# Which strategy the bot trades. Pick it with `python -m trader compare`.
+strategy: momentum_rotation # trend_pullback | momentum_rotation | opening_range_breakout
+
+# Liquid ETFs only: diversified, cheap to trade, no single-company blowups.
+universe: [SPY, QQQ, IWM, DIA, EFA, EEM, XLK, XLF, XLV, XLE, XLI, XLY, XLP, XLU, TLT, IEF, GLD]
+benchmark: SPY
+
+risk:
+  risk_per_trade: 0.01      # lose at most 1% of equity if a stop is hit
+  max_position_pct: 0.34    # no single position above 34% of equity
+  max_positions: 3
+  daily_loss_limit: 0.02    # down 2% vs yesterday's close -> flatten, no new trades today
+  max_drawdown_halt: 0.15   # down 15% from the equity peak -> flatten and halt until a human resumes
+  max_order_value: 5000     # live sanity cap per order (USD); raise deliberately as the account grows
+
+costs:
+  slippage_bps: 5           # 0.05% per fill, each side
+  commission_per_order: 0.0 # Alpaca stock/ETF trades are commission-free
+
+backtest:
+  capital: 10000
+  start: "2008-01-01"       # includes 2008, 2020 and 2022 drawdowns on purpose
+  oos_split: 0.6            # first 60% in-sample, last 40% out-of-sample
+
+data:
+  source: yahoo             # yahoo | alpaca | csv | synthetic
+  csv_dir: data/csv         # for source=csv: one <SYMBOL>.csv per symbol (date,open,high,low,close,volume)
+  alpaca_feed: iex          # iex (free) | sip (paid)
+
+strategies:
+  trend_pullback:
+    sma_trend: 200
+    rsi_len: 2
+    rsi_entry: 10
+    sma_exit: 5
+    atr_len: 14
+    atr_stop: 2.5
+  momentum_rotation:
+    lookback: 126           # ~6 months
+    top_n: 3
+    sma_trend: 200
+  opening_range_breakout:
+    range_minutes: 30
+    last_entry: "14:00"
+    universe: [SPY, QQQ, IWM]
